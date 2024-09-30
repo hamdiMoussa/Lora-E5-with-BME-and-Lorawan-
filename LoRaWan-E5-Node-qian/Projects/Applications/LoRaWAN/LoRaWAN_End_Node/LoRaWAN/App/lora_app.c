@@ -43,7 +43,8 @@
 /* USER CODE BEGIN Includes */
 
 /* USER CODE END Includes */
-extern I2C_HandleTypeDef hi2c1;
+extern I2C_HandleTypeDef hi2c3;
+
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */
 
@@ -388,28 +389,16 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 static void SendTxData(void)
 {
   /* USER CODE BEGIN SendTxData_1 */
-	  uint32_t 			pressure 		= 0;
-	  uint32_t 			gas_resistance	= 0;
-	  uint16_t 			humidity		= 0;
-	  uint16_t 			temperature 	= 0;
 
-	  struct bme68x_data data;
-	  bme68x_start(&data, &hi2c1);
+	  uint32_t pressure = 0;
+	  int16_t temperature = 0;
+	  uint16_t humidity = 0;
+	  uint32_t gas_resistance = 0;
 
-	  	if (bme68x_single_measure(&data) == 0) {
 
-	  		// Measurement is successful, so continue with IAQ
-	  		data.iaq_score = bme68x_iaq(); // Calculate IAQ
+ struct bme68x_data data;
 
-	  		// Create a message buffer
-	  		//char msgBuffer[70];
 
-	  		// Store the sensor values in variables
-	  		temperature = data.temperature;
-	  		humidity = data.humidity;
-	  		gas_resistance = data.gas_resistance;
-	  		pressure = data.pressure;
-	  	}
 
   UTIL_TIMER_Time_t nextTxIn = 0;
 
@@ -420,6 +409,17 @@ static void SendTxData(void)
 
 #endif /* CAYENNE_LPP */
 
+  bme68x_start(&data, &hi2c3);
+  if (bme68x_single_measure(&data) == 0) {
+    // Measurement is successful
+	data.iaq_score = bme68x_iaq(); // Calculate IAQ
+
+    temperature = (int16_t)(data.temperature * 100);   // Convert to deci-degrees
+    humidity = (uint16_t)(data.humidity * 100);        // Convert to deci-percent
+    pressure = (uint32_t)(data.pressure * 100);  // Convert to hPa/10
+    gas_resistance = (uint32_t)(data.gas_resistance * 100); // In ohms
+
+  }
 
   AppData.Port = LORAWAN_USER_APP_PORT;
 
@@ -439,14 +439,21 @@ static void SendTxData(void)
   CayenneLppCopy(AppData.Buffer);
   AppData.BufferSize = CayenneLppGetSize();
 #else  /* not CAYENNE_LPP */
-
-
-  AppData.Buffer[i++] = AppLedStateOn;
-  AppData.Buffer[i++] = (uint8_t)((pressure >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(pressure & 0xFF);
+    //gas_resistance = 1150;
+  //pressure = 1210;
+  //AppData.Buffer[i++] = AppLedStateOn;
+  AppData.Buffer[i++] = (uint8_t)((temperature >> 8) & 0xFF);
   AppData.Buffer[i++] = (uint8_t)(temperature & 0xFF);
   AppData.Buffer[i++] = (uint8_t)((humidity >> 8) & 0xFF);
   AppData.Buffer[i++] = (uint8_t)(humidity & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)((pressure >> 24) & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)((pressure >> 16) & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)((pressure >> 8) & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)(pressure & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)((gas_resistance >> 24) & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)((gas_resistance >> 16) & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)((gas_resistance >> 8) & 0xFF);
+  AppData.Buffer[i++] = (uint8_t)(gas_resistance & 0xFF);
 
   if ((LmHandlerParams.ActiveRegion == LORAMAC_REGION_US915) || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AU915)
       || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AS923))
